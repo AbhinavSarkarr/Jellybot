@@ -30,14 +30,8 @@ load_dotenv()
 app = FastAPI(title="RAG FUSION MAPPING SEMANTICS")
 
 # handling CORS
-origins = [
-    "http://localhost:5174",
-    "http://localhost:5174/",
-    "http://localhost:8000",
-    "https://a32e-163-47-141-203.ngrok-free.app",
-    "https://66793bd3a58cfa8f07013835--harmonious-marigold-987178.netlify.app",
-    "*",
-]
+origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
