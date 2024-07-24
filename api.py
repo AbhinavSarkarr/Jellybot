@@ -51,7 +51,7 @@ def send_gmail(subject, body, sender, recipients, password):
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = sender
-    msg["To"] = ", ".join(recipients)
+    msg["To"] = recipients
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp_server:
         smtp_server.login(sender, password)
         smtp_server.sendmail(sender, recipients, msg.as_string())
@@ -70,6 +70,7 @@ class EmailModel(BaseModel):
     chat: dict
     session_id: str
     ip_address: str
+    user_info: dict
 
 
 # creating vector db with pinecone
@@ -248,6 +249,9 @@ async def send_email(email: EmailModel):
         for person, message in email.chat.items():
             email_body += f"{person} - {message}\n"
         email_body += f"\nUser IP Address: {email.ip_address}\n"
+        email_body += "\nUser IP Address Information:\n"
+        for key, value in email.user_info.items():
+            email_body += f"{key} - {value}\n"
         send_gmail(subject, email_body, sender, recipients, password)
         return {"message": f"Email sent successfully to {recipients}"}
     except Exception as e:
