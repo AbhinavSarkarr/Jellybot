@@ -1,4 +1,6 @@
 import os
+import smtplib
+from email.mime.text import MIMEText
 from typing import Optional
 
 from dotenv import dotenv_values, load_dotenv
@@ -13,9 +15,6 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
 from pydantic import BaseModel
-
-# from constants import text
-# from langchain_core.documents import Document
 
 # Integrating Langsmith with the system for troubleshooting and debugging
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
@@ -48,11 +47,29 @@ app.add_middleware(
 )
 
 
+def send_gmail(subject, body, sender, recipients, password):
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = ", ".join(recipients)
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp_server:
+        smtp_server.login(sender, password)
+        smtp_server.sendmail(sender, recipients, msg.as_string())
+    print("Message sent!")
+
+
 # Defining Request model
 class RequestModel(BaseModel):
     query: str
     context: Optional[list[str]] = None
     session_id: str
+
+
+class EmailModel(BaseModel):
+    subject: str
+    chat: dict
+    session_id: str
+    ip_address: str
 
 
 # creating vector db with pinecone
@@ -62,7 +79,7 @@ pc = Pinecone(api_key=pinecone_api_key)
 # declaring embedding
 embeddings = OpenAIEmbeddings()
 # declaring index name for vector db which will be used for retrieval
-index_name = "jellyfish-vectordb"
+index_name = "jellyfish-vector-db"
 
 # existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
 
@@ -80,9 +97,8 @@ index_name = "jellyfish-vectordb"
 
 
 # docs = []
-
-# for i in text:
-#     docs.append(Document(page_content=i, metadata={}))
+# for i in range(len(text)):
+#     docs.append(Document(page_content=text[i], metadata={}))
 
 # gpt = ChatOpenAI(
 #     temperature=0.0,
@@ -105,12 +121,12 @@ index_name = "jellyfish-vectordb"
 #     for i in range(len(summaries))
 # ]
 
-# inserting data
+# #inserting data
 # docsearch = PineconeVectorStore.from_documents(
 #     summary_docs, embeddings, index_name=index_name
 # )
 
-# Add more data
+# # Add more data
 # vectorstore = PineconeVectorStore(index_name=index_name, embedding=embeddings)
 # vectorstore.add_documents(documents=summary_docs)
 
@@ -129,7 +145,7 @@ def context_retriever(query):
 user_message = """
 
 <|Storyline|>
-You are Jelly, a Chatbot of Jellyfish Technologies Website.\
+You are Jelly, an Assistant of Jellyfish Technologies Website.\
 Throughout your interactions, you aim to ask relevant question to understand their requirements and highlight how Jellyfish Technologies can meet those needs.\
 Your primary goal is to guide users to contact the company through the contact form or contact details to discuss their needs and how Jellyfish Technologies can help them.\
 Each response should be a step towards encouraging the user to get in touch with the company.\
@@ -158,6 +174,7 @@ Global Presence/Branches/Addresses/Locations : 59, West Broadway #200 Salt Lake 
 Contact form: https://www.jellyfishtechnologies.com/contact-us/\
 Awards/Recognition/Certifications/Greeting bagged by Jellyfish/ reasons to choose jellyfish: 5/5 verified rating on Goodfirms, Top Developers on Clutch, Salesforce Certified Developer, Best Company by Goodfirms, Great Place to Work Certified\
 Contact Details: Email: enquiry@jellyfishtechnologies.com, hr@jellyfishtechnologies.com, Phone: +1-760-514-0178, linekdin: https://www.linkedin.com/company/teamjft/mycompany/ 
+
 {context}\
 Strictly Answer in less than 70 words\
 Strictly provide all the relevant urls with every response.\
@@ -220,37 +237,55 @@ async def answer_query(req: RequestModel):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Tried with chroma
-# vectorstore = Chroma(
-#     collection_name="summaries",
-#     embedding_function=OpenAIEmbeddings(),
-#     persist_directory="chroma_store",
-# )
-
-# store = InMemoryByteStore()
-# id_key = "doc_id"
-
-# retriever = MultiVectorRetriever(
-#     vectorstore=vectorstore,
-#     byte_store=store,
-#     id_key=id_key,
-# )
-
-# with open("docstore.pkl", "rb") as f:
-#     store.store = pickle.load(f)
+@app.post("/sendMail")
+async def send_email(email: EmailModel):
+    try:
+        sender = os.getenv("SENDER")
+        password = os.getenv("PASSWORD")
+        recipients = os.getenv("RECIPENT")
+        subject = email.subject
+        email_body = "Chat History with User:\n\n"
+        for person, message in email.chat.items():
+            email_body += f"{person} - {message}\n"
+        email_body += f"\nUser IP Address: {email.ip_address}\n"
+        send_gmail(subject, email_body, sender, recipients, password)
+        return {"message": f"Email sent successfully to {recipients}"}
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# def doc_context(question):
-#     query = question
-#     sub_docs = vectorstore.similarity_search(query, k=1)
-#     print(sub_docs[0])
-#     metadata = sub_docs[0].metadata
-#     doc_id = metadata.get("doc_id")
-#     original_docs = retriever.docstore.store.mget(
-#         [retriever.docstore.key_encoder(doc_id)]
-#     )
-#     print(original_docs[0])
-#     original_doc = original_docs[0]
-#     data = json.loads(original_doc.decode("utf-8"))
-#     context = data["kwargs"]["page_content"]
-#     return context
+# # Tried with chroma
+# # vectorstore = Chroma(
+# #     collection_name="summaries",
+# #     embedding_function=OpenAIEmbeddings(),
+# #     persist_directory="chroma_store",
+# # )
+
+# # store = InMemoryByteStore()
+# # id_key = "doc_id"
+
+# # retriever = MultiVectorRetriever(
+# #     vectorstore=vectorstore,
+# #     byte_store=store,
+# #     id_key=id_key,
+# # )
+
+# # with open("docstore.pkl", "rb") as f:
+# #     store.store = pickle.load(f)
+
+
+# # def doc_context(question):
+# #     query = question
+# #     sub_docs = vectorstore.similarity_search(query, k=1)
+# #     print(sub_docs[0])
+# #     metadata = sub_docs[0].metadata
+# #     doc_id = metadata.get("doc_id")
+# #     original_docs = retriever.docstore.store.mget(
+# #         [retriever.docstore.key_encoder(doc_id)]
+# #     )
+# #     print(original_docs[0])
+# #     original_doc = original_docs[0]
+# #     data = json.loads(original_doc.decode("utf-8"))
+# #     context = data["kwargs"]["page_content"]
+# #     return context
